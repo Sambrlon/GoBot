@@ -10,9 +10,10 @@ import (
 )
 
 type AdminBot struct {
-	Bot         *tgbotapi.BotAPI
-	DB          *sqlx.DB
-	AdminChatID int64
+	Bot             *tgbotapi.BotAPI
+	DB              *sqlx.DB
+	AdminChatID     int64
+	LastClientMsgID map[int64]int
 }
 
 func NewAdminBot(token string, db *sqlx.DB, adminChatID int64) (*AdminBot, error) {
@@ -22,9 +23,10 @@ func NewAdminBot(token string, db *sqlx.DB, adminChatID int64) (*AdminBot, error
 	}
 
 	return &AdminBot{
-		Bot:         bot,
-		DB:          db,
-		AdminChatID: adminChatID, // Установите AdminChatID
+		Bot:             bot,
+		DB:              db,
+		AdminChatID:     adminChatID,
+		LastClientMsgID: make(map[int64]int),
 	}, nil
 }
 
@@ -34,20 +36,33 @@ func (a *AdminBot) Start() {
 	for update := range updates {
 		if update.Message != nil {
 			message := update.Message.Text
-			// Получаем идентификатор чата администратора
 			adminChatID := update.Message.Chat.ID
 			clientChatID := update.Message.Chat.ID
 			clientMessageID := update.Message.MessageID
 
 			a.sendToClient(clientChatID, message, clientMessageID)
+			a.LastClientMsgID[clientChatID] = clientMessageID
 
-			// Сохраняем сообщение в базе данных
 			err := a.saveMessage(adminChatID, update.Message.From.UserName, message, true)
 
 			if err != nil {
 				log.Printf("Error saving message to DB: %s", err)
 			}
 		}
+	}
+}
+
+func (a *AdminBot) ForwardToAdmin(clientChatID int64, clientMessageID int, message string) {
+	// Отправляем сообщение администратора как ответ на сообщение клиента
+	msg := tgbotapi.NewMessage(clientChatID, message)
+	msg.ReplyToMessageID = clientMessageID
+	_, err := a.Bot.Send(msg)
+
+	// Сохраняем сообщение в базе данных
+	err = a.saveMessage(clientChatID, "Admin", message, true)
+
+	if err != nil {
+		log.Printf("Error forwarding message to admin: %s", err)
 	}
 }
 

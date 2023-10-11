@@ -42,34 +42,23 @@ func (c *ClientBot) Start() {
 		if update.Message != nil {
 			message := update.Message.Text
 			clientChatID := update.Message.Chat.ID
+			clientMessageID := update.Message.MessageID
 
-			// Пересылаем сообщение администратору
-			c.AdminBot.ForwardToAdmin(clientChatID, message)
-
-			// Сохраняем идентификатор чата клиента в базе данных
 			err := c.saveClientChatID(clientChatID)
 
 			if err != nil {
 				log.Printf("Error saving client chat ID: %s", err)
 			}
 
-			// Сохраняем сообщение в базе данных
+			c.AdminBot.ForwardToAdmin(clientChatID, clientMessageID, message)
+
 			err = c.saveMessage(clientChatID, update.Message.From.UserName, message, false)
 			if err != nil {
 				log.Printf("Error saving message to DB: %s", err)
 			}
 
-			// Отправляем подтверждение клиенту
-			c.sendToClient(clientChatID, "Ваш вопрос был отправлен администратору для обработки. Ожидайте ответа.")
+			c.sendToClient(clientChatID, "Ваш вопрос был отправлен администратору для обработки. Ожидайте ответа.", clientMessageID)
 		}
-	}
-}
-
-func (a *AdminBot) ForwardToAdmin(clientChatID int64, message string) {
-	msg := tgbotapi.NewMessage(clientChatID, message)
-	_, err := a.Bot.Send(msg)
-	if err != nil {
-		log.Printf("Error forwarding message to admin: %s", err)
 	}
 }
 
@@ -84,7 +73,6 @@ func (c *ClientBot) sendToAdmin(message string, clientChatID int64, clientMessag
 }
 
 func (c *ClientBot) saveClientChatID(chatID int64) error {
-	// Сохраняем идентификатор чата клиента в базе данных
 	_, err := c.DB.Exec(`
         INSERT INTO clients (chat_id)
         VALUES ($1)
@@ -94,8 +82,9 @@ func (c *ClientBot) saveClientChatID(chatID int64) error {
 	return err
 }
 
-func (c *ClientBot) sendToClient(chatID int64, message string) {
+func (c *ClientBot) sendToClient(chatID int64, message string, clientMessageID int) {
 	msg := tgbotapi.NewMessage(chatID, message)
+	msg.ReplyToMessageID = clientMessageID
 	_, err := c.Bot.Send(msg)
 	if err != nil {
 		log.Printf("Error sending message to client: %s", err)
