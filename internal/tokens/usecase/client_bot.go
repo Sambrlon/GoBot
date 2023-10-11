@@ -13,10 +13,11 @@ type ClientBot struct {
 	Bot       *tgbotapi.BotAPI
 	ChatID    int64
 	AdminChat int64
+	AdminBot  *AdminBot
 	DB        *sqlx.DB
 }
 
-func NewClientBot(token string, chatID int64, adminChat int64, db *sqlx.DB) (*ClientBot, error) {
+func NewClientBot(token string, chatID int64, adminChat int64, adminBot *AdminBot, db *sqlx.DB) (*ClientBot, error) {
 	bot, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		return nil, err
@@ -26,6 +27,7 @@ func NewClientBot(token string, chatID int64, adminChat int64, db *sqlx.DB) (*Cl
 		Bot:       bot,
 		ChatID:    chatID,
 		AdminChat: adminChat,
+		AdminBot:  adminBot,
 		DB:        db,
 	}, nil
 }
@@ -39,29 +41,61 @@ func (c *ClientBot) Start() {
 	for update := range updates {
 		if update.Message != nil {
 			message := update.Message.Text
+			clientChatID := update.Message.Chat.ID
 
-			c.sendToAdmin(message)
+			// Пересылаем сообщение администратору
+			c.AdminBot.ForwardToAdmin(clientChatID, message)
 
-			err := c.saveMessage(update.Message.Chat.ID, update.Message.From.UserName, message, false)
+			// Сохраняем идентификатор чата клиента в базе данных
+			err := c.saveClientChatID(clientChatID)
+
+			if err != nil {
+				log.Printf("Error saving client chat ID: %s", err)
+			}
+
+			// Сохраняем сообщение в базе данных
+			err = c.saveMessage(clientChatID, update.Message.From.UserName, message, false)
 			if err != nil {
 				log.Printf("Error saving message to DB: %s", err)
 			}
 
-			c.sendToClient("Ваш вопрос был отправлен администратору для обработки. Ожидайте ответа.")
+			// Отправляем подтверждение клиенту
+			c.sendToClient(clientChatID, "Ваш вопрос был отправлен администратору для обработки. Ожидайте ответа.")
 		}
 	}
 }
 
-func (c *ClientBot) sendToAdmin(message string) {
+func (a *AdminBot) ForwardToAdmin(clientChatID int64, message string) {
+	msg := tgbotapi.NewMessage(clientChatID, message)
+	_, err := a.Bot.Send(msg)
+	if err != nil {
+		log.Printf("Error forwarding message to admin: %s", err)
+	}
+}
+
+func (c *ClientBot) sendToAdmin(message string, clientChatID int64, clientMessageID int) {
 	msg := tgbotapi.NewMessage(c.AdminChat, message)
+	msg.ReplyToMessageID = clientMessageID
+	msg.BaseChat.ChatID = clientChatID
 	_, err := c.Bot.Send(msg)
 	if err != nil {
 		log.Printf("Error sending message to admin: %s", err)
 	}
 }
 
-func (c *ClientBot) sendToClient(message string) {
-	msg := tgbotapi.NewMessage(c.ChatID, message)
+func (c *ClientBot) saveClientChatID(chatID int64) error {
+	// Сохраняем идентификатор чата клиента в базе данных
+	_, err := c.DB.Exec(`
+        INSERT INTO clients (chat_id)
+        VALUES ($1)
+        ON CONFLICT (chat_id) DO NOTHING
+    `, chatID)
+
+	return err
+}
+
+func (c *ClientBot) sendToClient(chatID int64, message string) {
+	msg := tgbotapi.NewMessage(chatID, message)
 	_, err := c.Bot.Send(msg)
 	if err != nil {
 		log.Printf("Error sending message to client: %s", err)

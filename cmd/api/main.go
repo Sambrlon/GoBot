@@ -22,17 +22,18 @@ func main() {
 		log.Fatalf("Error setting up the database: %s", err)
 	}
 
-	clientBot, err := usecase.NewClientBot(cfg.ClientBotToken, cfg.ClientChatID, 0, db.DB)
+	adminBot, err := usecase.NewAdminBot(cfg.AdminBotToken, db.DB, cfg.AdminChatID)
+	if err != nil {
+		log.Fatalf("Error initializing admin bot: %s", err)
+	}
+	go adminBot.Start()
+
+	clientBot, err := usecase.NewClientBot(cfg.ClientBotToken, cfg.ClientChatID, cfg.AdminChatID, adminBot, db.DB)
+
 	if err != nil {
 		log.Fatalf("Error initializing client bot: %s", err)
 	}
 	go clientBot.Start()
-
-	adminBot, err := usecase.NewAdminBot(cfg.AdminBotToken, db.DB)
-	if err != nil {
-		log.Fatalf("Error initializing admin bot: %s", err)
-	}
-	go adminBot.Start(cfg.ClientChatID)
 
 	select {}
 }
