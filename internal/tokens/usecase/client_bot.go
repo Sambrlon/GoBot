@@ -50,14 +50,12 @@ func (c *ClientBot) Start() {
 				log.Printf("Error saving client chat ID: %s", err)
 			}
 
-			c.AdminBot.ForwardToAdmin(clientChatID, clientMessageID, message)
+			c.AdminBot.sendToClient(clientChatID, message, clientMessageID)
 
 			err = c.saveMessage(clientChatID, update.Message.From.UserName, message, false)
 			if err != nil {
 				log.Printf("Error saving message to DB: %s", err)
 			}
-
-			c.sendToClient(clientChatID, "Ваш вопрос был отправлен администратору для обработки. Ожидайте ответа.", clientMessageID)
 		}
 	}
 }
@@ -74,21 +72,12 @@ func (c *ClientBot) sendToAdmin(message string, clientChatID int64, clientMessag
 
 func (c *ClientBot) saveClientChatID(chatID int64) error {
 	_, err := c.DB.Exec(`
-        INSERT INTO clients (chat_id)
+        INSERT INTO messages (chat_id)
         VALUES ($1)
         ON CONFLICT (chat_id) DO NOTHING
     `, chatID)
 
 	return err
-}
-
-func (c *ClientBot) sendToClient(chatID int64, message string, clientMessageID int) {
-	msg := tgbotapi.NewMessage(chatID, message)
-	msg.ReplyToMessageID = clientMessageID
-	_, err := c.Bot.Send(msg)
-	if err != nil {
-		log.Printf("Error sending message to client: %s", err)
-	}
 }
 
 func (c *ClientBot) saveMessage(chatID int64, username, text string, isAdmin bool) error {

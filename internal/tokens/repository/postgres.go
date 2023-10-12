@@ -34,6 +34,8 @@ func (r *PostgresRepository) Close() error {
 
 // SaveClientChatID сохраняет идентификатор чата клиента в базе данных.
 func (r *PostgresRepository) SaveClientChatID(chatID int64) error {
-	_, err := r.DB.Exec(`INSERT INTO clients (chat_id) VALUES ($1)`, chatID)
+	_, err := r.DB.Exec(`INSERT INTO messages (chat_id) VALUES ($1)`, chatID)
 	return err
 }
+
+// Добавить функцию SaveClientMessageID

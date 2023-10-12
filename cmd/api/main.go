@@ -4,6 +4,7 @@ import (
 	"bot/config"
 	"bot/internal/tokens/repository"
 	"bot/internal/tokens/usecase"
+	"bot/pkg/setup_base"
 	"log"
 )
 
@@ -15,9 +16,9 @@ func main() {
 		User:     cfg.DBConfig.User,
 		Password: cfg.DBConfig.Password,
 		Dbname:   cfg.DBConfig.Dbname,
-	}
+	} // Зачем в маине находится структура подклчения к бд
 
-	db, err := config.SetupDatabase(dbConfig)
+	db, err := setup_base.SetupDatabase(dbConfig)
 	if err != nil {
 		log.Fatalf("Error setting up the database: %s", err)
 	}
